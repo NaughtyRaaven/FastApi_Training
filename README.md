@@ -5,3 +5,6 @@ py -m venv venv
 
 Packages
 pip install fastapi[all]
+
+Run
+uvicorn main:app --reload
