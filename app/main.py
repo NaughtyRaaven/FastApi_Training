@@ -1,13 +1,19 @@
-from random import randrange
 from typing import Optional
-from fastapi import FastAPI, Response, status, HTTPException
+from click import command
+from fastapi import FastAPI, Response, status, HTTPException, Depends
 from fastapi.params import Body
 import psycopg2
 from psycopg2.extras import RealDictCursor
 import time
+from . import models
+from .database import engine, get_db
+from sqlalchemy.orm import Session
 
 # pydantic schema: validate schema of data
 from pydantic import BaseModel
+
+
+models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 
@@ -58,22 +64,35 @@ def find_index_post(id):
             return i
 
 
+@app.get("/sqlalchemy")
+def test_posts(db: Session = Depends(get_db)):
+    return {"status": "Success"}
+
+
 @app.get("/posts")
 def get_posts():
-    return {"data": my_posts}
+    cursor.execute("""SELECT * FROM posts""")
+    posts = cursor.fetchall()
+    print(posts)
+    return {"data": posts}
 
 
 @app.post("/posts", status_code=status.HTTP_201_CREATED)
 def create_posts(post: Post):
-    post_dict = post.model_dump()  # convert pydantic model to python dict
-    post_dict["id"] = randrange(0, 1000000)
-    my_posts.append(post_dict)
-    return {"data": post_dict}
+    cursor.execute(
+        """INSERT INTO posts (title, content, published) VALUES ('{0}', '{1}', '{2}') RETURNING *""".format(
+            post.title, post.content, post.published
+        ),
+    )
+    new_post = cursor.fetchone()
+    conn.commit()  # must have
+    return {"data": new_post}
 
 
 @app.get("/posts/{id}")
 def get_post(id: int):  # validate and auto convert
-    post = find_post(id)
+    cursor.execute("""SELECT * FROM posts WHERE id = {0}""".format(id))
+    post = cursor.fetchone()
     if not post:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -84,25 +103,29 @@ def get_post(id: int):  # validate and auto convert
 
 @app.delete("/posts/{id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_post(id: int):
-    index = find_index_post(int(id))
-    if index == None:
+    cursor.execute("""DELETE FROM posts WHERE id = {0} RETURNING *""".format(id))
+    post = cursor.fetchone()
+    if post == None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"post with id: {id} was not found",
         )
-    my_posts.pop(index)
+    conn.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @app.put("/posts/{id}")
 def update_post(id: int, post: Post):
-    index = find_index_post(int(id))
-    if index == None:
+    cursor.execute(
+        """UPDATE posts SET title = '{0}', content = '{1}', published = '{2}' WHERE id = {3} RETURNING *""".format(
+            post.title, post.content, post.published, id
+        )
+    )
+    updated_post = cursor.fetchone()
+    if updated_post == None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"post with id: {id} was not found",
         )
-    post_dict = post.model_dump()
-    post_dict["id"] = id
-    my_posts[index] = post_dict
-    return {"data": post_dict}
+    conn.commit()
+    return {"data": updated_post}
