@@ -1,11 +1,11 @@
-from typing import Optional
+from typing import Optional, List
 from click import command
 from fastapi import FastAPI, Response, status, HTTPException, Depends
 from fastapi.params import Body
 import psycopg2
 from psycopg2.extras import RealDictCursor
 import time
-from . import models
+from . import models, schemas
 from .database import engine, get_db
 from sqlalchemy.orm import Session
 
@@ -16,12 +16,6 @@ from pydantic import BaseModel
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
-
-
-class Post(BaseModel):
-    title: str
-    content: str
-    published: bool = True
 
 
 while True:
@@ -47,11 +41,6 @@ my_posts = [
 ]
 
 
-@app.get("/")
-def root():
-    return "Message"
-
-
 def find_post(id):
     for p in my_posts:
         if p["id"] == id:
@@ -64,68 +53,83 @@ def find_index_post(id):
             return i
 
 
-@app.get("/sqlalchemy")
-def test_posts(db: Session = Depends(get_db)):
-    return {"status": "Success"}
+@app.get("/")
+def root():
+    return "Message"
 
 
-@app.get("/posts")
-def get_posts():
-    cursor.execute("""SELECT * FROM posts""")
-    posts = cursor.fetchall()
-    print(posts)
-    return {"data": posts}
+@app.get("/posts", response_model=List[schemas.Post])
+def get_posts(db: Session = Depends(get_db)):
+    # cursor.execute("""SELECT * FROM posts""")
+    # posts = cursor.fetchall()
+    posts = db.query(models.Post).all()
+    return posts
 
 
-@app.post("/posts", status_code=status.HTTP_201_CREATED)
-def create_posts(post: Post):
-    cursor.execute(
-        """INSERT INTO posts (title, content, published) VALUES ('{0}', '{1}', '{2}') RETURNING *""".format(
-            post.title, post.content, post.published
-        ),
-    )
-    new_post = cursor.fetchone()
-    conn.commit()  # must have
-    return {"data": new_post}
+@app.post("/posts", status_code=status.HTTP_201_CREATED, response_model=schemas.Post)
+def create_posts(post: schemas.PostCreate, db: Session = Depends(get_db)):
+    # cursor.execute(
+    #     """INSERT INTO posts (title, content, published) VALUES ('{0}', '{1}', '{2}') RETURNING *""".format(
+    #         post.title, post.content, post.published
+    #     ),
+    # )
+    # new_post = cursor.fetchone()
+    # conn.commit()  # must have
+    new_post = models.Post(
+        **post.model_dump()
+    )  # **post.model_dump() unpack python dict
+    db.add(new_post)
+    db.commit()
+    db.refresh(new_post)  # = RETURNING *
+    return new_post
 
 
-@app.get("/posts/{id}")
-def get_post(id: int):  # validate and auto convert
-    cursor.execute("""SELECT * FROM posts WHERE id = {0}""".format(id))
-    post = cursor.fetchone()
+@app.get("/posts/{id}", response_model=schemas.Post)
+def get_post(id: int, db: Session = Depends(get_db)):  # validate and auto convert
+    # cursor.execute("""SELECT * FROM posts WHERE id = {0}""".format(id))
+    # post = cursor.fetchone()
+    post = db.query(models.Post).filter(models.Post.id == id).first()
     if not post:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"post with id: {id} was not found",
         )
-    return {"post": post}
+    print(type(post))
+    print(post)
+    return post
 
 
 @app.delete("/posts/{id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_post(id: int):
-    cursor.execute("""DELETE FROM posts WHERE id = {0} RETURNING *""".format(id))
-    post = cursor.fetchone()
-    if post == None:
+def delete_post(id: int, db: Session = Depends(get_db)):
+    # cursor.execute("""DELETE FROM posts WHERE id = {0} RETURNING *""".format(id))
+    # post = cursor.fetchone()
+    # conn.commit()
+    post_query = db.query(models.Post).filter(models.Post.id == id)
+    if post_query.first() == None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"post with id: {id} was not found",
         )
-    conn.commit()
+    post_query.delete(synchronize_session=False)
+    db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@app.put("/posts/{id}")
-def update_post(id: int, post: Post):
-    cursor.execute(
-        """UPDATE posts SET title = '{0}', content = '{1}', published = '{2}' WHERE id = {3} RETURNING *""".format(
-            post.title, post.content, post.published, id
-        )
-    )
-    updated_post = cursor.fetchone()
-    if updated_post == None:
+@app.put("/posts/{id}", response_model=schemas.Post)
+def update_post(id: int, post: schemas.PostCreate, db: Session = Depends(get_db)):
+    # cursor.execute(
+    #     """UPDATE posts SET title = '{0}', content = '{1}', published = '{2}' WHERE id = {3} RETURNING *""".format(
+    #         post.title, post.content, post.published, id
+    #     )
+    # )
+    # updated_post = cursor.fetchone()
+    # conn.commit()
+    post_query = db.query(models.Post).filter(models.Post.id == id)
+    if post_query.first() == None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"post with id: {id} was not found",
         )
-    conn.commit()
-    return {"data": updated_post}
+    post_query.update(post.model_dump(), synchronize_session=False)
+    db.commit()
+    return post_query.first()
