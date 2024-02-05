@@ -12,7 +12,7 @@ router = APIRouter(prefix="/posts", tags=["Posts"])
 @router.get("/", response_model=List[schemas.Post])
 def get_posts(
     db: Session = Depends(get_db),
-    user_id: int = Depends(oauth2.get_current_user),
+    current_user=Depends(oauth2.get_current_user),
 ):
     # cursor.execute("""SELECT * FROM posts""")
     # posts = cursor.fetchall()
@@ -24,7 +24,7 @@ def get_posts(
 def create_posts(
     post: schemas.PostCreate,
     db: Session = Depends(get_db),
-    user_id: int = Depends(oauth2.get_current_user),
+    current_user=Depends(oauth2.get_current_user),
 ):
 
     # cursor.execute(
@@ -34,7 +34,7 @@ def create_posts(
     # )
     # new_post = cursor.fetchone()
     # conn.commit()  # must have
-    print(user_id)
+    print(current_user.email)
     new_post = models.Post(
         **post.model_dump()
     )  # **post.model_dump() unpack python dict
@@ -48,7 +48,7 @@ def create_posts(
 def get_post(
     id: int,
     db: Session = Depends(get_db),
-    user_id: int = Depends(oauth2.get_current_user),
+    current_user=Depends(oauth2.get_current_user),
 ):  # validate and auto convert
     # cursor.execute("""SELECT * FROM posts WHERE id = {0}""".format(id))
     # post = cursor.fetchone()
@@ -67,7 +67,7 @@ def get_post(
 def delete_post(
     id: int,
     db: Session = Depends(get_db),
-    user_id: int = Depends(oauth2.get_current_user),
+    current_user=Depends(oauth2.get_current_user),
 ):
     # cursor.execute("""DELETE FROM posts WHERE id = {0} RETURNING *""".format(id))
     # post = cursor.fetchone()
@@ -88,7 +88,7 @@ def update_post(
     id: int,
     post: schemas.PostCreate,
     db: Session = Depends(get_db),
-    user_id: int = Depends(oauth2.get_current_user),
+    current_user=Depends(oauth2.get_current_user),
 ):
     # cursor.execute(
     #     """UPDATE posts SET title = '{0}', content = '{1}', published = '{2}' WHERE id = {3} RETURNING *""".format(
