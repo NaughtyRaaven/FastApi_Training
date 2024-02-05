@@ -1,22 +1,32 @@
 from fastapi import FastAPI, Response, status, HTTPException, Depends, APIRouter
 from typing import List
 from sqlalchemy.orm import Session
-from .. import models, schemas
+
+from app import oauth2
+from .. import models, schemas, oauth2
 from ..database import get_db
 
-router = APIRouter()
+router = APIRouter(prefix="/posts", tags=["Posts"])
 
 
-@router.get("/posts", response_model=List[schemas.Post])
-def get_posts(db: Session = Depends(get_db)):
+@router.get("/", response_model=List[schemas.Post])
+def get_posts(
+    db: Session = Depends(get_db),
+    user_id: int = Depends(oauth2.get_current_user),
+):
     # cursor.execute("""SELECT * FROM posts""")
     # posts = cursor.fetchall()
     posts = db.query(models.Post).all()
     return posts
 
 
-@router.post("/posts", status_code=status.HTTP_201_CREATED, response_model=schemas.Post)
-def create_posts(post: schemas.PostCreate, db: Session = Depends(get_db)):
+@router.post("/", status_code=status.HTTP_201_CREATED, response_model=schemas.Post)
+def create_posts(
+    post: schemas.PostCreate,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(oauth2.get_current_user),
+):
+
     # cursor.execute(
     #     """INSERT INTO posts (title, content, published) VALUES ('{0}', '{1}', '{2}') RETURNING *""".format(
     #         post.title, post.content, post.published
@@ -24,6 +34,7 @@ def create_posts(post: schemas.PostCreate, db: Session = Depends(get_db)):
     # )
     # new_post = cursor.fetchone()
     # conn.commit()  # must have
+    print(user_id)
     new_post = models.Post(
         **post.model_dump()
     )  # **post.model_dump() unpack python dict
@@ -33,8 +44,12 @@ def create_posts(post: schemas.PostCreate, db: Session = Depends(get_db)):
     return new_post
 
 
-@router.get("/posts/{id}", response_model=schemas.Post)
-def get_post(id: int, db: Session = Depends(get_db)):  # validate and auto convert
+@router.get("/{id}", response_model=schemas.Post)
+def get_post(
+    id: int,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(oauth2.get_current_user),
+):  # validate and auto convert
     # cursor.execute("""SELECT * FROM posts WHERE id = {0}""".format(id))
     # post = cursor.fetchone()
     post = db.query(models.Post).filter(models.Post.id == id).first()
@@ -48,8 +63,12 @@ def get_post(id: int, db: Session = Depends(get_db)):  # validate and auto conve
     return post
 
 
-@router.delete("/posts/{id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_post(id: int, db: Session = Depends(get_db)):
+@router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_post(
+    id: int,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(oauth2.get_current_user),
+):
     # cursor.execute("""DELETE FROM posts WHERE id = {0} RETURNING *""".format(id))
     # post = cursor.fetchone()
     # conn.commit()
@@ -64,8 +83,13 @@ def delete_post(id: int, db: Session = Depends(get_db)):
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.put("/posts/{id}", response_model=schemas.Post)
-def update_post(id: int, post: schemas.PostCreate, db: Session = Depends(get_db)):
+@router.put("/{id}", response_model=schemas.Post)
+def update_post(
+    id: int,
+    post: schemas.PostCreate,
+    db: Session = Depends(get_db),
+    user_id: int = Depends(oauth2.get_current_user),
+):
     # cursor.execute(
     #     """UPDATE posts SET title = '{0}', content = '{1}', published = '{2}' WHERE id = {3} RETURNING *""".format(
     #         post.title, post.content, post.published, id
