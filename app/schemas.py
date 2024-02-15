@@ -36,6 +36,15 @@ class Post(PostBase):
     owner: UserOut
 
 
+class PostOut(BaseModel):
+    model_config = ConfigDict(
+        from_attributes=True
+    )  # convert sqlalchemy model to pydantic model
+
+    Post: Post
+    votes: int
+
+
 class UserCreate(BaseModel):
     email: EmailStr
     password: str
