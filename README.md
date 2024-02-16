@@ -11,3 +11,7 @@ uvicorn main:app --reload
 
 <!-- Alembic
 alembic init alembic -->
+
+Heroku
+heroku create APP_NAME
+git push heroku main
