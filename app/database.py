@@ -18,6 +18,7 @@ Base = declarative_base()
 def get_db():
     db = SessionLocal()
     try:
+        print("Database connection was successful")
         yield db
     finally:
         db.close()
